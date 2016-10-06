@@ -1,7 +1,28 @@
 Relax - A Java library for annotation-routed, RxJava-enabled endpoints
 ======================================================================
 
-README TBD.
+Endpoint Example:
+----------------
+
+```java
+@Service(root = "/myservice", version = "v2")
+public class MyService {
+
+    @GET("/person/{id}")
+    public Observable<Person> getPerson(@Path("id") Integer personId,
+                                        @Header("Authorization") String authorization) {
+        ...
+    }
+
+    @PUT("/person/{id}")
+    public Observable<Person> getPerson(@Path("id") Integer personId,
+                                        @Header("Authorization") String authorization,
+                                        @Body Person person) {
+        ...
+    }
+}
+
+```
 
 License
 -------
