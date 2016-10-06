@@ -8,6 +8,13 @@ Endpoint Example:
 @Service(root = "/myservice", version = "v2")
 public class MyService {
 
+    @GET("/person")
+    public Observable<PersonList> listPersons(@Header("Authorization") String authorization,
+                                              @Query("offset") Integer offset,
+                                              @Query("limit") Integer limit) {
+        ...
+    }
+
     @GET("/person/{id}")
     public Observable<Person> getPerson(@Path("id") Integer personId,
                                         @Header("Authorization") String authorization) {
