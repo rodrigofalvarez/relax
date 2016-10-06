@@ -42,7 +42,7 @@ The web.xml file contains this:
     <async-supported>true</async-supported>
     <init-param>
         <param-name>endpoints</param-name>
-        <param-value>com.craftandresolve.relax.example.MyService</param-value>
+        <param-value>com.craftandresolve.relax.example.MyService,com.craftandresolve.relax.example.MyOtherService</param-value>
     </init-param>
 </servlet>
 ```
