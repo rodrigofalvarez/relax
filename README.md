@@ -4,6 +4,8 @@ Relax - A Java library for annotation-routed, RxJava-enabled endpoints
 Endpoint Example:
 ----------------
 
+The endpoint looks like this:
+
 ```java
 @Service(root = "/myservice", version = "v2")
 public class MyService {
@@ -31,6 +33,20 @@ public class MyService {
 
 ```
 
+The web.xml file contains this:
+
+```xml
+<servlet>
+    <servlet-name>RelaxServlet</servlet-name>
+    <servlet-class>com.craftandresolve.relax.RelaxServlet</servlet-class>
+    <async-supported>true</async-supported>
+    <init-param>
+        <param-name>endpoints</param-name>
+        <param-value>com.craftandresolve.relax.example.MyService</param-value>
+    </init-param>
+</servlet>
+```
+
 License
 -------
 
@@ -52,4 +68,3 @@ License
 
  [1]: http://rodrigofalvarez.github.com/relax/
  [2]: http://github.com/rodrigofalvarez/relax/downloads
- [snap]: https://oss.sonatype.org/content/repositories/snapshots/
