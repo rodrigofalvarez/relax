@@ -15,7 +15,7 @@ public class MyService {
     }
 
     @PUT("/person/{id}")
-    public Observable<Person> getPerson(@Path("id") Integer personId,
+    public Observable<Person> putPerson(@Path("id") Integer personId,
                                         @Header("Authorization") String authorization,
                                         @Body Person person) {
         ...
