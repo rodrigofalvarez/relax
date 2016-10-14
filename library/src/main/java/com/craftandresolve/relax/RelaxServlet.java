@@ -26,6 +26,7 @@ import com.craftandresolve.relax.exception.HTTPCodeException;
 import com.craftandresolve.relax.exception.InternalErrorException;
 import com.craftandresolve.relax.exception.NotFoundException;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import rx.Observable;
 import rx.Subscriber;
 import rx.schedulers.Schedulers;
@@ -45,6 +46,40 @@ import java.util.*;
 
 public class RelaxServlet extends HttpServlet {
 
+    private class QueryArgument {
+        public String name;
+        public String type;
+    }
+
+    private class HeaderArgument {
+        public String header;
+    }
+
+    private class PathArgument {
+        public String name;
+        public String type;
+    }
+
+    private class DirectoryEndpoint {
+        public String method;
+        public String path;
+        public List<HeaderArgument> headers;
+        public List<PathArgument> pathArguments;
+        public List<QueryArgument> queryArguments;
+        public String bodyType;
+    }
+
+    private class DirectoryService {
+        public String root;
+        public List<DirectoryEndpoint> endpoints;
+    }
+
+    private class DirectoryResponse {
+        public List<DirectoryService> services;
+    }
+
+    //
+
     private class ErrorResponse {
         public Integer code;
         public String shortText;
@@ -53,9 +88,11 @@ public class RelaxServlet extends HttpServlet {
 
     //
 
-    private final Gson gson = new Gson();
+    private Gson gson;
     private final Map<String, Object> endpointContainers = new HashMap<>();
     private final Map<String, Method> endpoints = new HashMap<>();
+    private String directory;
+    private DirectoryResponse directoryResponse;
 
     //
 
@@ -278,8 +315,14 @@ public class RelaxServlet extends HttpServlet {
 
     private void initialize(String endpointString) throws ServletException {
 
+        GsonBuilder gsonBuilder = new GsonBuilder();
+        if("true".equals(getInitParameter("prettyjson"))) {
+            gsonBuilder.setPrettyPrinting();
+        }
+        gson = gsonBuilder.create();
+
         if(null == endpointString) {
-            throw new ServletException("No endpoints init parameter found");
+            throw new ServletException("No services init parameter found");
         }
 
         for(String endpointClassString : endpointString.split(",")) {
@@ -291,7 +334,21 @@ public class RelaxServlet extends HttpServlet {
                     String root = endpointServiceAnnotation.root();
                     String version = endpointServiceAnnotation.version();
 
+                    if(null != directory) {
+                        if (null == directoryResponse) {
+                            directoryResponse = new DirectoryResponse();
+                            directoryResponse.services = new ArrayList<>();
+                        }
+                    }
+
                     String prefix = root + (!version.isEmpty() ? ("/" + version) : "");
+
+                    DirectoryService directoryService = null;
+                    if(null != directory) {
+                        directoryService = new DirectoryService();
+                        directoryService.root = prefix;
+                        directoryResponse.services.add(directoryService);
+                    }
 
                     for (Method method : clazz.getMethods()) {
 
@@ -327,6 +384,63 @@ public class RelaxServlet extends HttpServlet {
 
                         if (null != httpVerb && null != httpPath) {
                             if(isValidPattern(httpPath)) {
+                                if(null != directory) {
+                                    if (null == directoryService.endpoints) {
+                                        directoryService.endpoints = new ArrayList<>();
+                                    }
+                                    DirectoryEndpoint directoryEndpoint;
+                                    directoryEndpoint = new DirectoryEndpoint();
+                                    directoryEndpoint.method = httpVerb;
+                                    directoryEndpoint.path = prefix + httpPath;
+                                    directoryService.endpoints.add(directoryEndpoint);
+
+                                    Annotation[][] anns = method.getParameterAnnotations();
+                                    Class<?>[] parameterTypes = method.getParameterTypes();
+
+                                    List<Object> parameters = new ArrayList<>();
+                                    for (int i = 0; i < parameterTypes.length; ++i) {
+                                        Class<?> parameterClass = parameterTypes[i];
+
+                                        for (Annotation annotation : anns[i]) {
+
+                                            Class<?> annotationClass = annotation.annotationType();
+
+                                            if (annotationClass == Body.class) {
+                                                directoryEndpoint.bodyType = parameterClass.getCanonicalName();
+                                            }
+                                            else if (annotationClass == Header.class) {
+                                                Header header = method.getParameters()[i].getAnnotation(Header.class);
+                                                if(null == directoryEndpoint.headers) {
+                                                    directoryEndpoint.headers = new ArrayList<>();
+                                                }
+                                                HeaderArgument argument = new HeaderArgument();
+                                                argument.header = header.value();
+                                                directoryEndpoint.headers.add(argument);
+                                            }
+                                            else if (annotationClass == Path.class) {
+                                                Path path = method.getParameters()[i].getAnnotation(Path.class);
+                                                if(null == directoryEndpoint.pathArguments) {
+                                                    directoryEndpoint.pathArguments = new ArrayList<>();
+                                                }
+                                                PathArgument argument = new PathArgument();
+                                                argument.name = path.value();
+                                                argument.type = parameterClass.getCanonicalName();
+                                                directoryEndpoint.pathArguments.add(argument);
+                                            }
+                                            else if (annotationClass == Query.class) {
+                                                Query path = method.getParameters()[i].getAnnotation(Query.class);
+                                                if(null == directoryEndpoint.queryArguments) {
+                                                    directoryEndpoint.queryArguments = new ArrayList<>();
+                                                }
+                                                QueryArgument argument = new QueryArgument();
+                                                argument.name = path.value();
+                                                argument.type = parameterClass.getCanonicalName();
+                                                directoryEndpoint.queryArguments.add(argument);
+                                            }
+                                        }
+                                    }
+                                }
+
                                 addEndpoint(httpVerb, prefix + httpPath, clazz.getConstructors()[0].newInstance(), method);
                             }
                             else {
@@ -337,7 +451,7 @@ public class RelaxServlet extends HttpServlet {
                 }
 
                 if(endpoints.isEmpty()) {
-                    throw new ServletException("No endpoints configured in endpoints init-param");
+                    throw new ServletException("No endpoints found in services configured in services init-param");
                 }
             }
             catch (Throwable e) {
@@ -406,11 +520,16 @@ public class RelaxServlet extends HttpServlet {
     @Override
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
-        initialize(config.getInitParameter("endpoints"));
+        directory = config.getInitParameter("directory");
+        initialize(config.getInitParameter("services"));
     }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        if(null != directory && directory.equals(req.getPathInfo())) {
+            resp.getWriter().print(gson.toJson(directoryResponse, DirectoryResponse.class));
+            return;
+        }
         processRequest(req);
     }
 
