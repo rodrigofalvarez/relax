@@ -18,7 +18,9 @@ public class MyService {
     }
 
     @GET("/person/{id}")
-    public Observable<Person> getPerson(@Path("id") Integer personId,
+    public Observable<Person> getPerson(HttpServletRequest request,
+                                        @Path("id") Integer personId,
+                                        HttpServletResponse response,
                                         @Header("Authorization") String authorization) {
         ...
     }
@@ -64,7 +66,3 @@ License
     See the License for the specific language governing permissions and
     limitations under the License.
 
-
-
- [1]: http://rodrigofalvarez.github.com/relax/
- [2]: http://github.com/rodrigofalvarez/relax/downloads
