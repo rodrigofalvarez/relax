@@ -59,6 +59,22 @@ The web.xml file contains this:
 
 Initialization parameters prettyjson and directory are optional.  Parameter directory causes a JSON description of the deployed servics and endpoints to be returned when the specified path is GET to.
 
+Download
+--------
+
+From repository:
+
+```groovy
+maven {
+   url 'https://raw.github.com/rodrigofalvarez/relax/repository'
+}
+```
+
+Declare dependency:
+
+```groovy
+compile 'com.craftandresolve.relax:relax:1.2.0'
+```
 
 License
 -------
