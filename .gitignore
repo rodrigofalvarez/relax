@@ -9,6 +9,8 @@
 
 .gradle
 /local.properties
+.idea/**/gradle.xml
+.idea/**/libraries
 
 ## mac
 
