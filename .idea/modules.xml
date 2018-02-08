@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/relax.iml" filepath="$PROJECT_DIR$/.idea/modules/relax.iml" />
       <module fileurl="file://$PROJECT_DIR$/relax.iml" filepath="$PROJECT_DIR$/relax.iml" />
     </modules>
   </component>

@@ -41,49 +41,51 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.util.*;
 
 
 public class RelaxServlet extends HttpServlet {
 
     private class QueryArgument {
-        public String name;
-        public String type;
+        String name;
+        String type;
     }
 
     private class HeaderArgument {
-        public String header;
+        String header;
     }
 
     private class PathArgument {
-        public String name;
-        public String type;
+        String name;
+        String type;
     }
 
     private class DirectoryEndpoint {
-        public String method;
-        public String path;
-        public List<HeaderArgument> headers;
-        public List<PathArgument> pathArguments;
-        public List<QueryArgument> queryArguments;
-        public String bodyType;
+        String method;
+        String path;
+        List<HeaderArgument> headers;
+        List<PathArgument> pathArguments;
+        List<QueryArgument> queryArguments;
+        String bodyType;
+        String returnType;
     }
 
     private class DirectoryService {
-        public String root;
-        public List<DirectoryEndpoint> endpoints;
+        String root;
+        List<DirectoryEndpoint> endpoints;
     }
 
     private class DirectoryResponse {
-        public List<DirectoryService> services;
+        List<DirectoryService> services;
     }
 
     //
 
     private class ErrorResponse {
-        public Integer code;
-        public String shortText;
-        public String longText;
+        Integer code;
+        String shortText;
+        String longText;
     }
 
     //
@@ -210,6 +212,7 @@ public class RelaxServlet extends HttpServlet {
         return map;
     }
 
+    @SuppressWarnings("unchecked")
     private <T> T castPrimitive(String s, Class<T> clazz) {
         if(clazz == String.class) {
             return (T)s;
@@ -250,10 +253,10 @@ public class RelaxServlet extends HttpServlet {
             Class<?> parameterClass = parameterTypes[i];
 
             if(parameterClass == HttpServletRequest.class) {
-                parameters.add((HttpServletRequest)context.getRequest());
+                parameters.add(context.getRequest());
             }
             else if(parameterClass == HttpServletResponse.class) {
-                parameters.add((HttpServletResponse)context.getResponse());
+                parameters.add(context.getResponse());
             }
             else {
                 for(Annotation annotation : annotations[i]) {
@@ -261,20 +264,16 @@ public class RelaxServlet extends HttpServlet {
                     Class<?> annotationClass = annotation.annotationType();
 
                     if(annotationClass == Body.class) {
-                        parameters.add(gson.fromJson(((HttpServletRequest)context.getRequest()).getReader(), parameterTypes[i]));
+                        parameters.add(gson.fromJson(context.getRequest().getReader(), parameterTypes[i]));
                     }
                     else if(annotationClass == Header.class) {
-                        parameters.add(((HttpServletRequest)context.getRequest()).getHeader(method.getParameters()[i].getAnnotation(Header.class).value()));
+                        parameters.add(((HttpServletRequest)context.getRequest()).getHeader(method.getParameters()[i].getAnnotation(Header.class).key()));
                     }
                     else if(annotationClass == Path.class) {
-                        Path path = method.getParameters()[i].getAnnotation(Path.class);
-                        String key = path.value();
-                        String value = pathValues.get(key);
-                        Object thing = castPrimitive(value, parameterClass);
-                        parameters.add(castPrimitive(pathValues.get(method.getParameters()[i].getAnnotation(Path.class).value()), parameterClass));
+                        parameters.add(castPrimitive(pathValues.get(method.getParameters()[i].getAnnotation(Path.class).key()), parameterClass));
                     }
                     else if(annotationClass == Query.class) {
-                        parameters.add(castPrimitive(((HttpServletRequest)context.getRequest()).getParameter(method.getParameters()[i].getAnnotation(Query.class).value()), parameterClass));
+                        parameters.add(castPrimitive(context.getRequest().getParameter(method.getParameters()[i].getAnnotation(Query.class).key()), parameterClass));
                     }
                 }
             }
@@ -313,7 +312,7 @@ public class RelaxServlet extends HttpServlet {
         return Observable.error(new NotFoundException("endpoint-not-found", "No endpoint was found."));
     }
 
-    protected void initialize(String directoryRoot, String endpointServices, boolean prettyJson) throws ServletException {
+    private void initialize(String directoryRoot, String endpointServices, boolean prettyJson) throws ServletException {
 
         directory = directoryRoot;
 
@@ -364,29 +363,29 @@ public class RelaxServlet extends HttpServlet {
                                 httpVerb = name.replace("com.craftandresolve.relax.annotation.endpoint.", "");
                                 if ("GET".equals(httpVerb)) {
                                     GET ann = method.getAnnotation(GET.class);
-                                    httpPath = ann.value();
+                                    httpPath = ann.path();
                                 } else if ("POST".equals(httpVerb)) {
                                     POST ann = method.getAnnotation(POST.class);
-                                    httpPath = ann.value();
+                                    httpPath = ann.path();
                                 } else if ("PUT".equals(httpVerb)) {
                                     PUT ann = method.getAnnotation(PUT.class);
-                                    httpPath = ann.value();
+                                    httpPath = ann.path();
                                 } else if ("HEAD".equals(httpVerb)) {
                                     HEAD ann = method.getAnnotation(HEAD.class);
-                                    httpPath = ann.value();
+                                    httpPath = ann.path();
                                 } else if ("OPTIONS".equals(httpVerb)) {
                                     OPTIONS ann = method.getAnnotation(OPTIONS.class);
-                                    httpPath = ann.value();
+                                    httpPath = ann.path();
                                 } else if ("DELETE".equals(httpVerb)) {
                                     DELETE ann = method.getAnnotation(DELETE.class);
-                                    httpPath = ann.value();
+                                    httpPath = ann.path();
                                 }
                             }
                         }
 
                         if (null != httpVerb && null != httpPath) {
                             if(isValidPattern(httpPath)) {
-                                if(null != directory) {
+                                if(null != directoryService) {
                                     if (null == directoryService.endpoints) {
                                         directoryService.endpoints = new ArrayList<>();
                                     }
@@ -396,10 +395,14 @@ public class RelaxServlet extends HttpServlet {
                                     directoryEndpoint.path = prefix + httpPath;
                                     directoryService.endpoints.add(directoryEndpoint);
 
+                                    Class returnClass = (Class) ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
+                                    if (returnClass != Void.class) {
+                                        directoryEndpoint.returnType = returnClass.getCanonicalName();
+                                    }
+
                                     Annotation[][] anns = method.getParameterAnnotations();
                                     Class<?>[] parameterTypes = method.getParameterTypes();
 
-                                    List<Object> parameters = new ArrayList<>();
                                     for (int i = 0; i < parameterTypes.length; ++i) {
                                         Class<?> parameterClass = parameterTypes[i];
 
@@ -416,7 +419,7 @@ public class RelaxServlet extends HttpServlet {
                                                     directoryEndpoint.headers = new ArrayList<>();
                                                 }
                                                 HeaderArgument argument = new HeaderArgument();
-                                                argument.header = header.value();
+                                                argument.header = header.key();
                                                 directoryEndpoint.headers.add(argument);
                                             }
                                             else if (annotationClass == Path.class) {
@@ -425,7 +428,7 @@ public class RelaxServlet extends HttpServlet {
                                                     directoryEndpoint.pathArguments = new ArrayList<>();
                                                 }
                                                 PathArgument argument = new PathArgument();
-                                                argument.name = path.value();
+                                                argument.name = path.key();
                                                 argument.type = parameterClass.getCanonicalName();
                                                 directoryEndpoint.pathArguments.add(argument);
                                             }
@@ -435,7 +438,7 @@ public class RelaxServlet extends HttpServlet {
                                                     directoryEndpoint.queryArguments = new ArrayList<>();
                                                 }
                                                 QueryArgument argument = new QueryArgument();
-                                                argument.name = path.value();
+                                                argument.name = path.key();
                                                 argument.type = parameterClass.getCanonicalName();
                                                 directoryEndpoint.queryArguments.add(argument);
                                             }
@@ -529,7 +532,7 @@ public class RelaxServlet extends HttpServlet {
         initialize(config);
     }
 
-    protected void initialize(ServletConfig config) throws ServletException {
+    private void initialize(ServletConfig config) throws ServletException {
         initialize(config.getInitParameter("directory"), config.getInitParameter("services"), "true".equals(getInitParameter("prettyjson")));
     }
 
