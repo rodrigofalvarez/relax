@@ -26,4 +26,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.PARAMETER})
 public @interface Query {
     String key();
+    String format() default "";
 }

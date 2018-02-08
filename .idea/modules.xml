@@ -4,6 +4,7 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/relax.iml" filepath="$PROJECT_DIR$/.idea/modules/relax.iml" />
       <module fileurl="file://$PROJECT_DIR$/relax.iml" filepath="$PROJECT_DIR$/relax.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/relax.iml" filepath="$PROJECT_DIR$/.idea/modules/relax.iml" />
     </modules>
   </component>
 </project>

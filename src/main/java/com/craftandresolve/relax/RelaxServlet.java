@@ -17,6 +17,7 @@
 package com.craftandresolve.relax;
 
 import com.craftandresolve.relax.annotation.endpoint.*;
+import com.craftandresolve.relax.annotation.entity.Format;
 import com.craftandresolve.relax.annotation.parameter.Body;
 import com.craftandresolve.relax.annotation.parameter.Header;
 import com.craftandresolve.relax.annotation.parameter.Path;
@@ -39,26 +40,38 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.util.*;
 
 
-public class RelaxServlet extends HttpServlet {
+public class  RelaxServlet extends HttpServlet {
 
     private class QueryArgument {
         String name;
         String type;
+        String format;
     }
 
     private class HeaderArgument {
         String header;
+        String format;
     }
 
     private class PathArgument {
         String name;
         String type;
+        String format;
+    }
+
+    private class DirectoryEntity {
+        String type;
+        String format;
+        DirectoryEntity ofType;
+        Map<String, DirectoryEntity> properties;
+        String debug;
     }
 
     private class DirectoryEndpoint {
@@ -67,8 +80,8 @@ public class RelaxServlet extends HttpServlet {
         List<HeaderArgument> headers;
         List<PathArgument> pathArguments;
         List<QueryArgument> queryArguments;
-        String bodyType;
-        String returnType;
+        DirectoryEntity request;
+        DirectoryEntity response;
     }
 
     private class DirectoryService {
@@ -94,7 +107,7 @@ public class RelaxServlet extends HttpServlet {
     private final Map<String, Object> endpointContainers = new HashMap<>();
     private final Map<String, Method> endpoints = new HashMap<>();
     private String directory;
-    private DirectoryResponse directoryResponse;
+    private String directoryJson;
 
     //
 
@@ -326,6 +339,8 @@ public class RelaxServlet extends HttpServlet {
             throw new ServletException("No services init parameter found");
         }
 
+        DirectoryResponse directoryResponse = null;
+
         for(String endpointClassString : endpointServices.split(",")) {
             try {
                 Class<?> clazz = Class.forName(endpointClassString);
@@ -336,10 +351,8 @@ public class RelaxServlet extends HttpServlet {
                     String version = endpointServiceAnnotation.version();
 
                     if(null != directory) {
-                        if (null == directoryResponse) {
-                            directoryResponse = new DirectoryResponse();
-                            directoryResponse.services = new ArrayList<>();
-                        }
+                        directoryResponse = new DirectoryResponse();
+                        directoryResponse.services = new ArrayList<>();
                     }
 
                     String prefix = root + (!version.isEmpty() ? ("/" + version) : "");
@@ -396,9 +409,7 @@ public class RelaxServlet extends HttpServlet {
                                     directoryService.endpoints.add(directoryEndpoint);
 
                                     Class returnClass = (Class) ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
-                                    if (returnClass != Void.class) {
-                                        directoryEndpoint.returnType = returnClass.getCanonicalName();
-                                    }
+                                    directoryEndpoint.response = classToEntity(returnClass, null);
 
                                     Annotation[][] anns = method.getParameterAnnotations();
                                     Class<?>[] parameterTypes = method.getParameterTypes();
@@ -411,7 +422,7 @@ public class RelaxServlet extends HttpServlet {
                                             Class<?> annotationClass = annotation.annotationType();
 
                                             if (annotationClass == Body.class) {
-                                                directoryEndpoint.bodyType = parameterClass.getCanonicalName();
+                                                directoryEndpoint.request = classToEntity(annotationClass, null);
                                             }
                                             else if (annotationClass == Header.class) {
                                                 Header header = method.getParameters()[i].getAnnotation(Header.class);
@@ -420,6 +431,7 @@ public class RelaxServlet extends HttpServlet {
                                                 }
                                                 HeaderArgument argument = new HeaderArgument();
                                                 argument.header = header.key();
+                                                argument.format = header.format();
                                                 directoryEndpoint.headers.add(argument);
                                             }
                                             else if (annotationClass == Path.class) {
@@ -429,16 +441,18 @@ public class RelaxServlet extends HttpServlet {
                                                 }
                                                 PathArgument argument = new PathArgument();
                                                 argument.name = path.key();
+                                                argument.format = path.format();
                                                 argument.type = parameterClass.getCanonicalName();
                                                 directoryEndpoint.pathArguments.add(argument);
                                             }
                                             else if (annotationClass == Query.class) {
-                                                Query path = method.getParameters()[i].getAnnotation(Query.class);
+                                                Query query = method.getParameters()[i].getAnnotation(Query.class);
                                                 if(null == directoryEndpoint.queryArguments) {
                                                     directoryEndpoint.queryArguments = new ArrayList<>();
                                                 }
                                                 QueryArgument argument = new QueryArgument();
-                                                argument.name = path.key();
+                                                argument.name = query.key();
+                                                argument.format = query.format();
                                                 argument.type = parameterClass.getCanonicalName();
                                                 directoryEndpoint.queryArguments.add(argument);
                                             }
@@ -459,6 +473,72 @@ public class RelaxServlet extends HttpServlet {
                 throw new ServletException(e);
             }
         }
+
+        if (null != directoryResponse) {
+            directoryJson = gson.toJson(directoryResponse, DirectoryResponse.class);
+        }
+    }
+
+    private boolean isList(Class<?> clazz) {
+        // for now, only List supported
+        return List.class == clazz;
+    }
+
+    private boolean isMap(Class<?> clazz) {
+        // for now, only Map supported
+        return Map.class == clazz;
+    }
+
+    private DirectoryEntity classToEntity(Class<?> classToConvert, String format) {
+        if (classToConvert == Void.class) {
+            return null;
+        }
+
+        DirectoryEntity entity = new DirectoryEntity();
+
+        entity.format = format;
+
+        String className = classToConvert.getCanonicalName();
+
+        if (classToConvert.isPrimitive() || className.startsWith("java.lang.")) {
+
+            entity.type = classToConvert.getCanonicalName();
+
+        } else {
+
+            if (isList(classToConvert)) {
+
+                entity.ofType = classToEntity(classToConvert.getTypeParameters()[0].getClass(), null);
+
+                entity.debug = "isList";
+
+            } else if (isMap(classToConvert)) {
+
+                entity.ofType = classToEntity(classToConvert.getTypeParameters()[1].getClass(), null);
+
+                entity.debug = "isMap";
+
+            } else {
+
+                Field[] fields = classToConvert.getDeclaredFields();
+
+                if (fields.length > 0) {
+
+                    entity.properties = new HashMap<>();
+
+                    for (Field field : fields) {
+                        Format formatAnnotation = field.getAnnotation(Format.class);
+                        String fieldFormat = null;
+                        if (null != formatAnnotation) {
+                            fieldFormat = formatAnnotation.value();
+                        }
+                        entity.properties.put(field.getName(), classToEntity(field.getType(), fieldFormat));
+                    }
+                }
+            }
+        }
+
+        return entity;
     }
 
     private void processRequest(HttpServletRequest req) throws ServletException, IOException {
@@ -539,7 +619,7 @@ public class RelaxServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if(null != directory && directory.equals(req.getPathInfo())) {
-            resp.getWriter().print(gson.toJson(directoryResponse, DirectoryResponse.class));
+            resp.getWriter().print(directoryJson);
             return;
         }
         processRequest(req);
