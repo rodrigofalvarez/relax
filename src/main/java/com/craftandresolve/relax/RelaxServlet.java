@@ -28,9 +28,10 @@ import com.craftandresolve.relax.exception.InternalErrorException;
 import com.craftandresolve.relax.exception.NotFoundException;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import rx.Observable;
-import rx.Subscriber;
-import rx.schedulers.Schedulers;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.schedulers.Schedulers;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletConfig;
@@ -39,6 +40,8 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -541,67 +544,82 @@ public class  RelaxServlet extends HttpServlet {
         return entity;
     }
 
-    private void processRequest(HttpServletRequest req) throws ServletException, IOException {
+    private void processRequest(HttpServletRequest req) {
 
         final AsyncContext context = req.startAsync();
 
         findAndInvokeEndpoint(context)
                 .subscribeOn(Schedulers.io())
-                .subscribe(new Subscriber<Object>() {
+                .subscribe(new Observer<Object>() {
 
-            private boolean emitted = false;
+                    private boolean emitted = false;
+                    private Disposable disposable;
 
-            @Override
-            public void onCompleted() {
-                if (!emitted) {
-                    HttpServletResponse response = (HttpServletResponse) context.getResponse();
-                    response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-                }
-                context.complete();
-                unsubscribe();
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-                HttpServletResponse response = (HttpServletResponse) context.getResponse();
-
-                ErrorResponse errorResponse = new ErrorResponse();
-                if(throwable instanceof HTTPCodeException) {
-                    errorResponse.code = ((HTTPCodeException) throwable).getCode();
-                    errorResponse.shortText = ((HTTPCodeException) throwable).getShortText();
-                }
-                else {
-                    errorResponse.code = 500;
-                }
-                errorResponse.longText = throwable.getLocalizedMessage();
-
-                response.setStatus(errorResponse.code);
-                response.addHeader("Content-Type", "application/json");
-                try {
-                    context.getResponse().getWriter().print(gson.toJson(errorResponse));
-                }
-                catch (IOException e) {
-                    // IGNORED
-                }
-                context.complete();
-                unsubscribe();
-            }
-
-            @Override
-            public void onNext(Object o) {
-
-                HttpServletResponse response = (HttpServletResponse) context.getResponse();
-                if (null != o && !(o instanceof Void)) {
-                    try {
-                        response.addHeader("Content-Type", "application/json");
-                        context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
-                        emitted = true;
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        disposable = d;
                     }
-                }
-            }
-        });
+
+                    @Override
+                    public void onNext(Object o) {
+                        HttpServletResponse response = (HttpServletResponse) context.getResponse();
+                        if (null != o && !(o instanceof Void)) {
+                            try {
+                                response.addHeader("Content-Type", "application/json");
+                                context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
+                                emitted = true;
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable throwable) {
+                        HttpServletResponse response = (HttpServletResponse) context.getResponse();
+
+                        ErrorResponse errorResponse = new ErrorResponse();
+                        if(throwable instanceof HTTPCodeException) {
+                            errorResponse.code = ((HTTPCodeException) throwable).getCode();
+                            errorResponse.shortText = ((HTTPCodeException) throwable).getShortText();
+                        }
+                        else {
+                            errorResponse.code = 500;
+                        }
+
+                        StringWriter writer = new StringWriter();
+                        PrintWriter printWriter = new PrintWriter(writer);
+                        throwable.printStackTrace(printWriter);
+                        Throwable causedBy = throwable.getCause();
+                        while (null != causedBy) {
+                            writer.append("\n\nCaused By\n\n");
+                            causedBy.printStackTrace(printWriter);
+                            causedBy = causedBy.getCause();
+                        }
+                        errorResponse.longText = writer.toString().replace("\\n\\t", "\n\t");
+
+                        response.setStatus(errorResponse.code);
+                        response.addHeader("Content-Type", "application/json");
+                        try {
+                            context.getResponse().getWriter().print(gson.toJson(errorResponse));
+                        }
+                        catch (IOException e) {
+                            // IGNORED
+                        }
+                        context.complete();
+                        disposable.dispose();
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        if (!emitted) {
+                            HttpServletResponse response = (HttpServletResponse) context.getResponse();
+                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                        }
+                        context.complete();
+                        disposable.dispose();
+                    }
+                });
     }
 
     // HttpServlet
@@ -617,7 +635,7 @@ public class  RelaxServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         if(null != directory && directory.equals(req.getPathInfo())) {
             resp.getWriter().print(directoryJson);
             return;
@@ -626,27 +644,27 @@ public class  RelaxServlet extends HttpServlet {
     }
 
     @Override
-    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) {
         processRequest(req);
     }
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) {
         processRequest(req);
     }
 
     @Override
-    protected void doHead(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doHead(HttpServletRequest req, HttpServletResponse resp) {
         processRequest(req);
     }
 
     @Override
-    protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doOptions(HttpServletRequest req, HttpServletResponse resp) {
         processRequest(req);
     }
 
     @Override
-    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) {
         processRequest(req);
     }
 }
