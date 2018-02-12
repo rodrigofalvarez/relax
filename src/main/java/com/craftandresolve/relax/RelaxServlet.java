@@ -43,10 +43,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.*;
 import java.util.*;
 
 
@@ -412,7 +409,7 @@ public class  RelaxServlet extends HttpServlet {
                                     directoryService.endpoints.add(directoryEndpoint);
 
                                     Class returnClass = (Class) ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
-                                    directoryEndpoint.response = classToEntity(returnClass, null);
+                                    directoryEndpoint.response = classToEntity(returnClass, null, null);
 
                                     Annotation[][] anns = method.getParameterAnnotations();
                                     Class<?>[] parameterTypes = method.getParameterTypes();
@@ -425,7 +422,7 @@ public class  RelaxServlet extends HttpServlet {
                                             Class<?> annotationClass = annotation.annotationType();
 
                                             if (annotationClass == Body.class) {
-                                                directoryEndpoint.request = classToEntity(annotationClass, null);
+                                                directoryEndpoint.request = classToEntity(annotationClass, null, null);
                                             }
                                             else if (annotationClass == Header.class) {
                                                 Header header = method.getParameters()[i].getAnnotation(Header.class);
@@ -492,7 +489,7 @@ public class  RelaxServlet extends HttpServlet {
         return Map.class == clazz;
     }
 
-    private DirectoryEntity classToEntity(Class<?> classToConvert, String format) {
+    private DirectoryEntity classToEntity(Class<?> classToConvert, String format, Class<?> containedType) {
         if (classToConvert == Void.class) {
             return null;
         }
@@ -509,17 +506,11 @@ public class  RelaxServlet extends HttpServlet {
 
         } else {
 
-            if (isList(classToConvert)) {
+            if (isList(classToConvert) || isMap(classToConvert)) {
 
-                entity.ofType = classToEntity(classToConvert.getTypeParameters()[0].getBounds()[0].getClass(), null);
+                entity.type = classToConvert.getCanonicalName();
 
-                entity.debug = "isList";
-
-            } else if (isMap(classToConvert)) {
-
-                entity.ofType = classToEntity(classToConvert.getTypeParameters()[0].getBounds()[1].getClass(), null);
-
-                entity.debug = "isMap";
+                entity.ofType = classToEntity(containedType, null, null);
 
             } else {
 
@@ -535,7 +526,27 @@ public class  RelaxServlet extends HttpServlet {
                         if (null != formatAnnotation) {
                             fieldFormat = formatAnnotation.value();
                         }
-                        entity.properties.put(field.getName(), classToEntity(field.getType(), fieldFormat));
+
+                        Class<?> ofType = null;
+                        if (isMap(field.getType())) {
+                            Type type = field.getGenericType();
+                            if (type instanceof ParameterizedType) {
+                                ParameterizedType pt = (ParameterizedType) type;
+                                if (null != pt.getActualTypeArguments() && pt.getActualTypeArguments().length == 2) {
+                                    ofType = ((Class) pt.getActualTypeArguments()[1]);
+                                }
+                            }
+                        } else if (isList(field.getType())) {
+                            Type type = field.getGenericType();
+                            if (type instanceof ParameterizedType) {
+                                ParameterizedType pt = (ParameterizedType) type;
+                                if (null != pt.getActualTypeArguments() && pt.getActualTypeArguments().length == 1) {
+                                    ofType = ((Class) pt.getActualTypeArguments()[0]);
+                                }
+                            }
+                        }
+
+                        entity.properties.put(field.getName(), classToEntity(field.getType(), fieldFormat, ofType));
                     }
                 }
             }
