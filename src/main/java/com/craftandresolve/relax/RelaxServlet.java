@@ -511,13 +511,13 @@ public class  RelaxServlet extends HttpServlet {
 
             if (isList(classToConvert)) {
 
-                entity.ofType = classToEntity(classToConvert.getTypeParameters()[0].getClass(), null);
+                entity.ofType = classToEntity(classToConvert.getTypeParameters()[0].getBounds()[0].getClass(), null);
 
                 entity.debug = "isList";
 
             } else if (isMap(classToConvert)) {
 
-                entity.ofType = classToEntity(classToConvert.getTypeParameters()[1].getClass(), null);
+                entity.ofType = classToEntity(classToConvert.getTypeParameters()[0].getBounds()[1].getClass(), null);
 
                 entity.debug = "isMap";
 
@@ -587,16 +587,18 @@ public class  RelaxServlet extends HttpServlet {
                             errorResponse.code = 500;
                         }
 
-                        StringWriter writer = new StringWriter();
-                        PrintWriter printWriter = new PrintWriter(writer);
-                        throwable.printStackTrace(printWriter);
-                        Throwable causedBy = throwable.getCause();
-                        while (null != causedBy) {
-                            writer.append("\n\nCaused By\n\n");
-                            causedBy.printStackTrace(printWriter);
-                            causedBy = causedBy.getCause();
+                        if (!(throwable instanceof HTTPCodeException)) {
+                            StringWriter writer = new StringWriter();
+                            PrintWriter printWriter = new PrintWriter(writer);
+                            throwable.printStackTrace(printWriter);
+                            Throwable causedBy = throwable.getCause();
+                            while (null != causedBy) {
+                                writer.append("\n\nCaused By\n\n");
+                                causedBy.printStackTrace(printWriter);
+                                causedBy = causedBy.getCause();
+                            }
+                            errorResponse.longText = writer.toString().replace("\\n\\t", "\n\t");
                         }
-                        errorResponse.longText = writer.toString().replace("\\n\\t", "\n\t");
 
                         response.setStatus(errorResponse.code);
                         response.addHeader("Content-Type", "application/json");
