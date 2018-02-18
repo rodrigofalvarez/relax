@@ -165,6 +165,8 @@ public class  RelaxServlet extends HttpServlet {
     private boolean isValidPattern(String pattern) {
         if(pattern.charAt(0) != '/') {
             return false;
+        } else if (pattern.equals("/")) {
+            return true;
         }
 
         pattern = pattern.substring(1, pattern.charAt(pattern.length()-1) == '/' ? pattern.length()-1 : pattern.length());
