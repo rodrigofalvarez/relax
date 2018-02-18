@@ -71,12 +71,12 @@ public class  RelaxServlet extends HttpServlet {
         String format;
         DirectoryEntity ofType;
         Map<String, DirectoryEntity> properties;
-        String debug;
     }
 
     private class DirectoryEndpoint {
         String method;
         String path;
+        String description;
         List<HeaderArgument> headers;
         List<PathArgument> pathArguments;
         List<QueryArgument> queryArguments;
@@ -370,6 +370,7 @@ public class  RelaxServlet extends HttpServlet {
 
                         String httpVerb = null;
                         String httpPath = null;
+                        String endpointDescription = null;
 
                         Annotation[] annotations = method.getAnnotations();
                         for (Annotation annotation : annotations) {
@@ -379,21 +380,27 @@ public class  RelaxServlet extends HttpServlet {
                                 if ("GET".equals(httpVerb)) {
                                     GET ann = method.getAnnotation(GET.class);
                                     httpPath = ann.path();
+                                    endpointDescription = ann.description();
                                 } else if ("POST".equals(httpVerb)) {
                                     POST ann = method.getAnnotation(POST.class);
                                     httpPath = ann.path();
+                                    endpointDescription = ann.description();
                                 } else if ("PUT".equals(httpVerb)) {
                                     PUT ann = method.getAnnotation(PUT.class);
                                     httpPath = ann.path();
+                                    endpointDescription = ann.description();
                                 } else if ("HEAD".equals(httpVerb)) {
                                     HEAD ann = method.getAnnotation(HEAD.class);
                                     httpPath = ann.path();
+                                    endpointDescription = ann.description();
                                 } else if ("OPTIONS".equals(httpVerb)) {
                                     OPTIONS ann = method.getAnnotation(OPTIONS.class);
                                     httpPath = ann.path();
+                                    endpointDescription = ann.description();
                                 } else if ("DELETE".equals(httpVerb)) {
                                     DELETE ann = method.getAnnotation(DELETE.class);
                                     httpPath = ann.path();
+                                    endpointDescription = ann.description();
                                 }
                             }
                         }
@@ -412,6 +419,7 @@ public class  RelaxServlet extends HttpServlet {
                                     directoryEndpoint = new DirectoryEndpoint();
                                     directoryEndpoint.method = httpVerb;
                                     directoryEndpoint.path = prefix + httpPath;
+                                    directoryEndpoint.description = endpointDescription;
                                     directoryService.endpoints.add(directoryEndpoint);
 
                                     Class returnClass = (Class) ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
