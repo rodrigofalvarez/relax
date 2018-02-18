@@ -343,14 +343,14 @@ public class  RelaxServlet extends HttpServlet {
 
         for(String endpointClassString : endpointServices.split(",")) {
             try {
-                Class<?> clazz = Class.forName(endpointClassString);
+                Class<?> clazz = Class.forName(endpointClassString.trim());
 
                 Service endpointServiceAnnotation = clazz.getAnnotation(Service.class);
                 if(null != endpointServiceAnnotation) {
                     String root = endpointServiceAnnotation.root();
                     String version = endpointServiceAnnotation.version();
 
-                    if(null != directory) {
+                    if(null != directory && null != directoryResponse) {
                         directoryResponse = new DirectoryResponse();
                         directoryResponse.services = new ArrayList<>();
                     }
