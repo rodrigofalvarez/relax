@@ -350,7 +350,7 @@ public class  RelaxServlet extends HttpServlet {
                     String root = endpointServiceAnnotation.root();
                     String version = endpointServiceAnnotation.version();
 
-                    if(null != directory && null != directoryResponse) {
+                    if(null != directory && null == directoryResponse) {
                         directoryResponse = new DirectoryResponse();
                         directoryResponse.services = new ArrayList<>();
                     }
