@@ -25,6 +25,6 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface Service {
-    String root() default "";
+    String root();
     String version() default "";
 }

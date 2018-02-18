@@ -26,4 +26,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.METHOD})
 public @interface POST {
     String path();
+    String description();
 }

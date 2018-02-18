@@ -163,10 +163,10 @@ public class  RelaxServlet extends HttpServlet {
     }
 
     private boolean isValidPattern(String pattern) {
-        if(pattern.charAt(0) != '/') {
-            return false;
-        } else if (pattern.equals("/")) {
+        if (pattern.isEmpty() || pattern.equals("/")) {
             return true;
+        } else if(!pattern.startsWith("/")) {
+            return false;
         }
 
         pattern = pattern.substring(1, pattern.charAt(pattern.length()-1) == '/' ? pattern.length()-1 : pattern.length());
@@ -399,6 +399,10 @@ public class  RelaxServlet extends HttpServlet {
                         }
 
                         if (null != httpVerb && null != httpPath) {
+                            if (httpPath.equals("/")) {
+                                httpPath = "";
+                            }
+
                             if(isValidPattern(httpPath)) {
                                 if(null != directoryService) {
                                     if (null == directoryService.endpoints) {

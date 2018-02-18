@@ -26,4 +26,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.METHOD})
 public @interface GET {
     String path();
+    String description();
 }

@@ -26,4 +26,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.METHOD})
 public @interface DELETE {
     String path();
+    String description();
 }
