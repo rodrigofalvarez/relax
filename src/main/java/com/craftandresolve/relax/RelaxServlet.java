@@ -327,7 +327,7 @@ public class  RelaxServlet extends HttpServlet {
         return Observable.error(new NotFoundException("endpoint-not-found", "No endpoint was found."));
     }
 
-    protected void initialize(String directoryRoot, List<Class<?>> endpointClasses, boolean prettyJson) throws ServletException {
+    protected void initialize(String directoryRoot, Map<String, List<Class<?>>> endpointClasses, boolean prettyJson) throws ServletException {
         directory = directoryRoot;
 
         GsonBuilder gsonBuilder = new GsonBuilder();
@@ -342,152 +342,157 @@ public class  RelaxServlet extends HttpServlet {
 
         DirectoryResponse directoryResponse = null;
 
-        for(Class<?> clazz : endpointClasses) {
-            try {
-                Service endpointServiceAnnotation = clazz.getAnnotation(Service.class);
-                if(null != endpointServiceAnnotation) {
-                    String root = endpointServiceAnnotation.root();
-                    String version = endpointServiceAnnotation.version();
+        for(Map.Entry<String, List<Class<?>>> entry : endpointClasses.entrySet()) {
+            String baseDir = entry.getKey();
 
-                    if(null != directory && null == directoryResponse) {
-                        directoryResponse = new DirectoryResponse();
-                        directoryResponse.services = new ArrayList<>();
-                    }
+            for (Class<?> clazz : entry.getValue()) {
+                try {
+                    Service endpointServiceAnnotation = clazz.getAnnotation(Service.class);
+                    if (null != endpointServiceAnnotation) {
+                        String root = baseDir + endpointServiceAnnotation.root();
+                        String version = endpointServiceAnnotation.version();
 
-                    String prefix = root + (!version.isEmpty() ? ("/" + version) : "");
-
-                    DirectoryService directoryService = null;
-                    if(null != directory) {
-                        directoryService = new DirectoryService();
-                        directoryService.root = prefix;
-                        directoryResponse.services.add(directoryService);
-                    }
-
-                    for (Method method : clazz.getMethods()) {
-
-                        String httpVerb = null;
-                        String httpPath = null;
-                        String endpointDescription = null;
-
-                        Annotation[] annotations = method.getAnnotations();
-                        for (Annotation annotation : annotations) {
-                            String name = annotation.annotationType().getCanonicalName();
-                            if (name.startsWith("com.craftandresolve.relax.annotation.endpoint.")) {
-                                httpVerb = name.replace("com.craftandresolve.relax.annotation.endpoint.", "");
-                                if ("GET".equals(httpVerb)) {
-                                    GET ann = method.getAnnotation(GET.class);
-                                    httpPath = ann.path();
-                                    endpointDescription = ann.description();
-                                } else if ("POST".equals(httpVerb)) {
-                                    POST ann = method.getAnnotation(POST.class);
-                                    httpPath = ann.path();
-                                    endpointDescription = ann.description();
-                                } else if ("PUT".equals(httpVerb)) {
-                                    PUT ann = method.getAnnotation(PUT.class);
-                                    httpPath = ann.path();
-                                    endpointDescription = ann.description();
-                                } else if ("HEAD".equals(httpVerb)) {
-                                    HEAD ann = method.getAnnotation(HEAD.class);
-                                    httpPath = ann.path();
-                                    endpointDescription = ann.description();
-                                } else if ("OPTIONS".equals(httpVerb)) {
-                                    OPTIONS ann = method.getAnnotation(OPTIONS.class);
-                                    httpPath = ann.path();
-                                    endpointDescription = ann.description();
-                                } else if ("DELETE".equals(httpVerb)) {
-                                    DELETE ann = method.getAnnotation(DELETE.class);
-                                    httpPath = ann.path();
-                                    endpointDescription = ann.description();
-                                }
-                            }
+                        if (null != directory && null == directoryResponse) {
+                            directoryResponse = new DirectoryResponse();
+                            directoryResponse.services = new ArrayList<>();
                         }
 
-                        if (null != httpVerb && null != httpPath) {
-                            if (httpPath.equals("/")) {
-                                httpPath = "";
+                        String prefix = root + (!version.isEmpty() ? ("/" + version) : "");
+
+                        DirectoryService directoryService = null;
+                        if (null != directory) {
+                            directoryService = new DirectoryService();
+                            directoryService.root = prefix;
+                            directoryResponse.services.add(directoryService);
+                        }
+
+                        for (Method method : clazz.getMethods()) {
+
+                            String httpVerb = null;
+                            String httpPath = null;
+                            String endpointDescription = null;
+
+                            Annotation[] annotations = method.getAnnotations();
+                            for (Annotation annotation : annotations) {
+                                String name = annotation.annotationType().getCanonicalName();
+                                if (name.startsWith("com.craftandresolve.relax.annotation.endpoint.")) {
+                                    httpVerb = name.replace("com.craftandresolve.relax.annotation.endpoint.", "");
+                                    if ("GET".equals(httpVerb)) {
+                                        GET ann = method.getAnnotation(GET.class);
+                                        httpPath = ann.path();
+                                        endpointDescription = ann.description();
+                                    } else if ("POST".equals(httpVerb)) {
+                                        POST ann = method.getAnnotation(POST.class);
+                                        httpPath = ann.path();
+                                        endpointDescription = ann.description();
+                                    } else if ("PUT".equals(httpVerb)) {
+                                        PUT ann = method.getAnnotation(PUT.class);
+                                        httpPath = ann.path();
+                                        endpointDescription = ann.description();
+                                    } else if ("HEAD".equals(httpVerb)) {
+                                        HEAD ann = method.getAnnotation(HEAD.class);
+                                        httpPath = ann.path();
+                                        endpointDescription = ann.description();
+                                    } else if ("OPTIONS".equals(httpVerb)) {
+                                        OPTIONS ann = method.getAnnotation(OPTIONS.class);
+                                        httpPath = ann.path();
+                                        endpointDescription = ann.description();
+                                    } else if ("DELETE".equals(httpVerb)) {
+                                        DELETE ann = method.getAnnotation(DELETE.class);
+                                        httpPath = ann.path();
+                                        endpointDescription = ann.description();
+                                    }
+                                }
                             }
 
-                            if(isValidPattern(httpPath)) {
-                                if(null != directoryService) {
-                                    if (null == directoryService.endpoints) {
-                                        directoryService.endpoints = new ArrayList<>();
-                                    }
-                                    DirectoryEndpoint directoryEndpoint;
-                                    directoryEndpoint = new DirectoryEndpoint();
-                                    directoryEndpoint.method = httpVerb;
-                                    directoryEndpoint.path = prefix + httpPath;
-                                    directoryEndpoint.description = endpointDescription;
-                                    directoryService.endpoints.add(directoryEndpoint);
+                            if (null != httpVerb && null != httpPath) {
+                                if (httpPath.equals("/")) {
+                                    httpPath = "";
+                                }
 
-                                    Class returnClass = (Class) ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
-                                    directoryEndpoint.response = classToEntity(returnClass, null, null);
+                                if (isValidPattern(httpPath)) {
+                                    if (null != directoryService) {
+                                        if (null == directoryService.endpoints) {
+                                            directoryService.endpoints = new ArrayList<>();
+                                        }
+                                        DirectoryEndpoint directoryEndpoint;
+                                        directoryEndpoint = new DirectoryEndpoint();
+                                        directoryEndpoint.method = httpVerb;
+                                        directoryEndpoint.path = prefix + httpPath;
+                                        directoryEndpoint.description = endpointDescription;
+                                        directoryService.endpoints.add(directoryEndpoint);
 
-                                    Annotation[][] anns = method.getParameterAnnotations();
-                                    Class<?>[] parameterTypes = method.getParameterTypes();
+                                        Class returnClass = (Class) ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0];
+                                        directoryEndpoint.response = classToEntity(returnClass, null, null);
 
-                                    for (int i = 0; i < parameterTypes.length; ++i) {
-                                        Class<?> parameterClass = parameterTypes[i];
+                                        Annotation[][] anns = method.getParameterAnnotations();
+                                        Class<?>[] parameterTypes = method.getParameterTypes();
 
-                                        for (Annotation annotation : anns[i]) {
+                                        for (int i = 0; i < parameterTypes.length; ++i) {
+                                            Class<?> parameterClass = parameterTypes[i];
 
-                                            Class<?> annotationClass = annotation.annotationType();
+                                            for (Annotation annotation : anns[i]) {
 
-                                            if (annotationClass == Body.class) {
-                                                directoryEndpoint.request = classToEntity(annotationClass, null, null);
-                                            }
-                                            else if (annotationClass == Header.class) {
-                                                Header header = method.getParameters()[i].getAnnotation(Header.class);
-                                                if(null == directoryEndpoint.headers) {
-                                                    directoryEndpoint.headers = new ArrayList<>();
+                                                Class<?> annotationClass = annotation.annotationType();
+
+                                                if (annotationClass == Body.class) {
+                                                    directoryEndpoint.request = classToEntity(annotationClass, null, null);
+                                                } else if (annotationClass == Header.class) {
+                                                    Header header = method.getParameters()[i].getAnnotation(Header.class);
+                                                    if (null == directoryEndpoint.headers) {
+                                                        directoryEndpoint.headers = new ArrayList<>();
+                                                    }
+                                                    HeaderArgument argument = new HeaderArgument();
+                                                    argument.header = header.key();
+                                                    argument.format = header.format();
+                                                    directoryEndpoint.headers.add(argument);
+                                                } else if (annotationClass == Path.class) {
+                                                    Path path = method.getParameters()[i].getAnnotation(Path.class);
+                                                    if (null == directoryEndpoint.pathArguments) {
+                                                        directoryEndpoint.pathArguments = new ArrayList<>();
+                                                    }
+                                                    PathArgument argument = new PathArgument();
+                                                    argument.name = path.key();
+                                                    argument.format = path.format();
+                                                    argument.type = parameterClass.getCanonicalName();
+                                                    directoryEndpoint.pathArguments.add(argument);
+                                                } else if (annotationClass == Query.class) {
+                                                    Query query = method.getParameters()[i].getAnnotation(Query.class);
+                                                    if (null == directoryEndpoint.queryArguments) {
+                                                        directoryEndpoint.queryArguments = new ArrayList<>();
+                                                    }
+                                                    QueryArgument argument = new QueryArgument();
+                                                    argument.name = query.key();
+                                                    argument.format = query.format();
+                                                    argument.type = parameterClass.getCanonicalName();
+                                                    directoryEndpoint.queryArguments.add(argument);
                                                 }
-                                                HeaderArgument argument = new HeaderArgument();
-                                                argument.header = header.key();
-                                                argument.format = header.format();
-                                                directoryEndpoint.headers.add(argument);
-                                            }
-                                            else if (annotationClass == Path.class) {
-                                                Path path = method.getParameters()[i].getAnnotation(Path.class);
-                                                if(null == directoryEndpoint.pathArguments) {
-                                                    directoryEndpoint.pathArguments = new ArrayList<>();
-                                                }
-                                                PathArgument argument = new PathArgument();
-                                                argument.name = path.key();
-                                                argument.format = path.format();
-                                                argument.type = parameterClass.getCanonicalName();
-                                                directoryEndpoint.pathArguments.add(argument);
-                                            }
-                                            else if (annotationClass == Query.class) {
-                                                Query query = method.getParameters()[i].getAnnotation(Query.class);
-                                                if(null == directoryEndpoint.queryArguments) {
-                                                    directoryEndpoint.queryArguments = new ArrayList<>();
-                                                }
-                                                QueryArgument argument = new QueryArgument();
-                                                argument.name = query.key();
-                                                argument.format = query.format();
-                                                argument.type = parameterClass.getCanonicalName();
-                                                directoryEndpoint.queryArguments.add(argument);
                                             }
                                         }
                                     }
-                                }
 
-                                addEndpoint(httpVerb, prefix + httpPath, clazz.getConstructors()[0].newInstance(), method);
-                            }
-                            else {
-                                throw new ServletException("Invalid endpoint pattern: " + httpPath);
+                                    addEndpoint(httpVerb, prefix + httpPath, clazz.getConstructors()[0].newInstance(), method);
+                                } else {
+                                    throw new ServletException("Invalid endpoint pattern: " + httpPath);
+                                }
                             }
                         }
                     }
+                } catch (Throwable e) {
+                    throw new ServletException(e);
                 }
-            }
-            catch (Throwable e) {
-                throw new ServletException(e);
             }
         }
 
         if (null != directoryResponse) {
             directoryJson = gson.toJson(directoryResponse, DirectoryResponse.class);
         }
+    }
+
+    protected void initialize(String directoryRoot, List<Class<?>> endpointClasses, boolean prettyJson) throws ServletException {
+        Map<String, List<Class<?>>> endpointMap = new HashMap<>();
+        endpointMap.put("", endpointClasses);
+        initialize(directoryRoot, endpointMap, prettyJson);
     }
 
     private void initialize(String directoryRoot, String endpointServices, boolean prettyJson) throws ServletException {
