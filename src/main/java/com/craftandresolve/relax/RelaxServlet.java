@@ -327,8 +327,7 @@ public class  RelaxServlet extends HttpServlet {
         return Observable.error(new NotFoundException("endpoint-not-found", "No endpoint was found."));
     }
 
-    private void initialize(String directoryRoot, String endpointServices, boolean prettyJson) throws ServletException {
-
+    protected void initialize(String directoryRoot, List<Class<?>> endpointClasses, boolean prettyJson) throws ServletException {
         directory = directoryRoot;
 
         GsonBuilder gsonBuilder = new GsonBuilder();
@@ -337,16 +336,14 @@ public class  RelaxServlet extends HttpServlet {
         }
         gson = gsonBuilder.create();
 
-        if(null == endpointServices) {
-            throw new ServletException("No services init parameter found");
+        if(null == endpointClasses || endpointClasses.isEmpty()) {
+            return;
         }
 
         DirectoryResponse directoryResponse = null;
 
-        for(String endpointClassString : endpointServices.split(",")) {
+        for(Class<?> clazz : endpointClasses) {
             try {
-                Class<?> clazz = Class.forName(endpointClassString.trim());
-
                 Service endpointServiceAnnotation = clazz.getAnnotation(Service.class);
                 if(null != endpointServiceAnnotation) {
                     String root = endpointServiceAnnotation.root();
@@ -491,6 +488,19 @@ public class  RelaxServlet extends HttpServlet {
         if (null != directoryResponse) {
             directoryJson = gson.toJson(directoryResponse, DirectoryResponse.class);
         }
+    }
+
+    private void initialize(String directoryRoot, String endpointServices, boolean prettyJson) throws ServletException {
+        List<Class<?>> endpointClasses = new ArrayList<>();
+        for(String endpointClassString : endpointServices.split(",")) {
+            try {
+                endpointClasses.add(Class.forName(endpointClassString.trim()));
+            }
+            catch (Throwable e) {
+                throw new ServletException(e);
+            }
+        }
+        initialize(directoryRoot, endpointClasses, prettyJson);
     }
 
     private boolean isList(Class<?> clazz) {
