@@ -73,7 +73,7 @@ maven {
 Declare dependency:
 
 ```groovy
-compile 'com.craftandresolve:relax:2.0.9'
+compile 'com.craftandresolve:relax:2.1.0'
 ```
 
 License
