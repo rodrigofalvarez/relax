@@ -38,23 +38,33 @@ public class MyService {
 The web.xml file contains this:
 
 ```xml
-<servlet>
-    <servlet-name>RelaxServlet</servlet-name>
-    <servlet-class>com.craftandresolve.relax.RelaxServlet</servlet-class>
-    <async-supported>true</async-supported>
-    <init-param>
-        <param-name>services</param-name>
-        <param-value>com.craftandresolve.relax.example.MyService,com.craftandresolve.relax.example.MyOtherService</param-value>
-    </init-param>
-    <init-param>
-        <param-name>prettyjson</param-name>
-        <param-value>true</param-value>
-    </init-param>
-    <init-param>
-        <param-name>directory</param-name>
-        <param-value>/directory</param-value>
-    </init-param>
-</servlet>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee 
+         http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd"
+         version="3.1">
+    <servlet>
+        <servlet-name>RelaxServlet</servlet-name>
+        <servlet-class>com.craftandresolve.relax.RelaxServlet</servlet-class>
+        <init-param>
+            <param-name>services</param-name>
+            <param-value>com.craftandresolve.relax.example.MyService,com.craftandresolve.relax.example.MyOtherService</param-value>
+        </init-param>
+        <init-param>
+            <param-name>prettyjson</param-name>
+            <param-value>true</param-value>
+        </init-param>
+        <init-param>
+            <param-name>directory</param-name>
+            <param-value>/directory</param-value>
+        </init-param>
+        <async-supported>true</async-supported>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>RelaxServlet</servlet-name>
+        <url-mapping>/basedir/*</url-mapping>
+    </servlet-mapping>
+</web-app>
 ```
 
 Initialization parameters prettyjson and directory are optional.  Parameter directory causes a JSON description of the deployed servics and endpoints to be returned when the specified path is GET to.
