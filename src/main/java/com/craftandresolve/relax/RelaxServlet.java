@@ -26,6 +26,7 @@ import com.craftandresolve.relax.annotation.service.Service;
 import com.craftandresolve.relax.exception.HTTPCodeException;
 import com.craftandresolve.relax.exception.InternalErrorException;
 import com.craftandresolve.relax.exception.NotFoundException;
+import com.craftandresolve.relax.type.CorsPreflightResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.reactivex.Observable;
@@ -104,10 +105,17 @@ public class  RelaxServlet extends HttpServlet {
     //
 
     private Gson gson;
+
     private final Map<String, Object> endpointContainers = new HashMap<>();
     private final Map<String, Method> endpoints = new HashMap<>();
+
     private String directory;
     private String directoryJson;
+
+    private String corsOrigins;
+    private String corsLifetime;
+    private final Map<String, Set<String>> corsMethods = new HashMap<>();
+    private final Map<String, Set<String>> corsHeaders = new HashMap<>();
 
     //
 
@@ -324,10 +332,19 @@ public class  RelaxServlet extends HttpServlet {
             }
         }
 
+        if (null != corsOrigins && "OPTIONS".equals(request.getMethod())) {
+            return Observable.just(new CorsPreflightResponse());
+        }
+
         return Observable.error(new NotFoundException("endpoint-not-found", "No endpoint was found."));
     }
 
-    protected void initialize(String directoryRoot, Map<String, List<Class<?>>> endpointClasses, boolean prettyJson) throws ServletException {
+    protected void initialize(
+            String directoryRoot,
+            Map<String, List<Class<?>>> endpointClasses,
+            String corsOrigins,
+            String corsLifetime,
+            boolean prettyJson) throws ServletException {
         directory = directoryRoot;
 
         GsonBuilder gsonBuilder = new GsonBuilder();
@@ -335,6 +352,9 @@ public class  RelaxServlet extends HttpServlet {
             gsonBuilder.setPrettyPrinting();
         }
         gson = gsonBuilder.create();
+
+        this.corsOrigins = corsOrigins;
+        this.corsLifetime = corsLifetime;
 
         if(null == endpointClasses || endpointClasses.isEmpty()) {
             return;
@@ -406,8 +426,16 @@ public class  RelaxServlet extends HttpServlet {
                             }
 
                             if (null != httpVerb && null != httpPath) {
+
                                 if (httpPath.equals("/")) {
                                     httpPath = "";
+                                }
+
+                                if (null != corsOrigins && !"OPTIONS".equals(httpVerb)) {
+                                    Set<String> methods = corsMethods.computeIfAbsent(prefix + httpPath, k -> new HashSet<>());
+                                    methods.add(httpVerb);
+                                    Set<String> headers = corsHeaders.computeIfAbsent(httpVerb + "|" + prefix + httpPath, k -> new HashSet<>());
+                                    headers.add("Content-Type");
                                 }
 
                                 if (isValidPattern(httpPath)) {
@@ -446,6 +474,11 @@ public class  RelaxServlet extends HttpServlet {
                                                     argument.header = header.key();
                                                     argument.format = header.format();
                                                     directoryEndpoint.headers.add(argument);
+
+                                                    if (null != corsOrigins && !"OPTIONS".equals(httpVerb)) {
+                                                        Set<String> headers = corsHeaders.get(httpVerb + "|" + prefix + httpPath);
+                                                        headers.add(header.key());
+                                                    }
                                                 } else if (annotationClass == Path.class) {
                                                     Path path = method.getParameters()[i].getAnnotation(Path.class);
                                                     if (null == directoryEndpoint.pathArguments) {
@@ -489,13 +522,18 @@ public class  RelaxServlet extends HttpServlet {
         }
     }
 
-    protected void initialize(String directoryRoot, List<Class<?>> endpointClasses, boolean prettyJson) throws ServletException {
+    protected void initialize(
+            String directoryRoot,
+            List<Class<?>> endpointClasses,
+            String corsOrigins,
+            String corsLifetime,
+            boolean prettyJson) throws ServletException {
         Map<String, List<Class<?>>> endpointMap = new HashMap<>();
         endpointMap.put("", endpointClasses);
-        initialize(directoryRoot, endpointMap, prettyJson);
+        initialize(directoryRoot, endpointMap, corsOrigins, corsLifetime, prettyJson);
     }
 
-    private void initialize(String directoryRoot, String endpointServices, boolean prettyJson) throws ServletException {
+    private void initialize(String directoryRoot, String endpointServices, String corsOrigins, String corsLifecycle, boolean prettyJson) throws ServletException {
         List<Class<?>> endpointClasses = new ArrayList<>();
         for(String endpointClassString : endpointServices.split(",")) {
             try {
@@ -505,7 +543,7 @@ public class  RelaxServlet extends HttpServlet {
                 throw new ServletException(e);
             }
         }
-        initialize(directoryRoot, endpointClasses, prettyJson);
+        initialize(directoryRoot, endpointClasses, corsOrigins, corsLifecycle, prettyJson);
     }
 
     private boolean isList(Class<?> clazz) {
@@ -602,14 +640,41 @@ public class  RelaxServlet extends HttpServlet {
 
                     @Override
                     public void onNext(Object o) {
-                        HttpServletResponse response = (HttpServletResponse) context.getResponse();
-                        if (null != o && !(o instanceof Void)) {
-                            try {
-                                response.addHeader("Content-Type", "application/json");
-                                context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
+                        if (null != o) {
+                            HttpServletResponse response = (HttpServletResponse) context.getResponse();
+                            if (o instanceof CorsPreflightResponse) {
+
+                                response.addHeader("Access-Control-Allow-Origin", corsOrigins);
+                                String pathInfo = req.getPathInfo();
+                                Set<String> methods = corsMethods.get(pathInfo);
+                                if (null != methods) {
+                                    response.addHeader("Access-Control-Allow-Methods", String.join(",", methods));
+                                    Set<String> allHeaders = new HashSet<>();
+                                    for (String method: methods) {
+                                        Set<String> headers = corsHeaders.get(method + "|" + req.getPathInfo());
+                                        if (null != headers) {
+                                            allHeaders.addAll(headers);
+                                        }
+                                    }
+                                    if (!allHeaders.isEmpty()) {
+                                        response.addHeader("Access-Control-Allow-Headers", String.join(",", allHeaders));
+                                    }
+                                }
+                                if (null != corsLifetime) {
+                                    response.addHeader("Access-Control-Max-Age", corsLifetime);
+                                }
                                 emitted = true;
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
+
+                            } else {
+                                try {
+                                    sendCorsHeaders(req, response);
+
+                                    response.addHeader("Content-Type", "application/json");
+                                    context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
+                                    emitted = true;
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
                             }
                         }
                     }
@@ -617,6 +682,8 @@ public class  RelaxServlet extends HttpServlet {
                     @Override
                     public void onError(Throwable throwable) {
                         HttpServletResponse response = (HttpServletResponse) context.getResponse();
+
+                        sendCorsHeaders(req, response);
 
                         ErrorResponse errorResponse = new ErrorResponse();
                         if(throwable instanceof HTTPCodeException) {
@@ -657,11 +724,29 @@ public class  RelaxServlet extends HttpServlet {
                         if (!emitted) {
                             HttpServletResponse response = (HttpServletResponse) context.getResponse();
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+
+                            sendCorsHeaders(req, response);
                         }
                         context.complete();
                         disposable.dispose();
                     }
                 });
+    }
+
+    private void sendCorsHeaders(HttpServletRequest request, HttpServletResponse response) {
+        if (null != corsOrigins) {
+            Set<String> methods = corsMethods.get(request.getPathInfo());
+            if (null != methods && methods.contains(request.getMethod())) {
+                response.addHeader("Access-Control-Allow-Origin", corsOrigins);
+                Set<String> headers = corsHeaders.get(request.getMethod() + "|" + request.getPathInfo());
+                if (null != headers) {
+                    response.addHeader("Access-Control-Allow-Headers", String.join(",", headers));
+                }
+                if (null != corsLifetime) {
+                    response.addHeader("Access-Control-Max-Age", corsLifetime);
+                }
+            }
+        }
     }
 
     // HttpServlet
@@ -673,7 +758,12 @@ public class  RelaxServlet extends HttpServlet {
     }
 
     private void initialize(ServletConfig config) throws ServletException {
-        initialize(config.getInitParameter("directory"), config.getInitParameter("services"), "true".equals(getInitParameter("prettyjson")));
+        initialize(
+                config.getInitParameter("directory"),
+                config.getInitParameter("services"),
+                config.getInitParameter("corsorigins"),
+                config.getInitParameter("corslifetime"),
+                "true".equals(getInitParameter("prettyjson")));
     }
 
     @Override
