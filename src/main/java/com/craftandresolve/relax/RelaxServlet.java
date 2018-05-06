@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Craft+Resolve, LLC.
+ * Copyright (C) 2016-2018 Craft+Resolve, LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ import com.craftandresolve.relax.exception.NotFoundException;
 import com.craftandresolve.relax.type.CorsPreflightResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import io.reactivex.Observable;
-import io.reactivex.Observer;
+import io.reactivex.Single;
+import io.reactivex.SingleObserver;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 
@@ -264,7 +264,7 @@ public class  RelaxServlet extends HttpServlet {
         throw new IllegalArgumentException();
     }
 
-    private Observable<?> invokeEndpoint(AsyncContext context, Object container, Method method, String pattern) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException, IOException {
+    private Single<?> invokeEndpoint(AsyncContext context, Object container, Method method, String pattern) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException, IOException {
 
         Map<String, String> pathValues = generatePathValues(context, pattern);
 
@@ -302,10 +302,10 @@ public class  RelaxServlet extends HttpServlet {
             }
         }
 
-        return ((Observable<?>)method.invoke(container, parameters.toArray()));
+        return ((Single<?>)method.invoke(container, parameters.toArray()));
     }
 
-    private Observable<?> findAndInvokeEndpoint(AsyncContext context) {
+    private Single<?> findAndInvokeEndpoint(AsyncContext context) {
 
         HttpServletRequest request = (HttpServletRequest)context.getRequest();
         String matchable = request.getMethod() + "|" + request.getPathInfo();
@@ -318,25 +318,25 @@ public class  RelaxServlet extends HttpServlet {
                     return invokeEndpoint(context, endpointContainer, method, pattern);
                 }
                 catch (IllegalAccessException e) {
-                    return Observable.error(new InternalErrorException("illegal-access", e));
+                    return Single.error(new InternalErrorException("illegal-access", e));
                 }
                 catch (InvocationTargetException e) {
-                    return Observable.error(new InternalErrorException("invocation-target", e));
+                    return Single.error(new InternalErrorException("invocation-target", e));
                 }
                 catch (IllegalArgumentException e) {
-                    return Observable.error(new InternalErrorException("error-bad-argument-type", e));
+                    return Single.error(new InternalErrorException("error-bad-argument-type", e));
                 }
                 catch (IOException e) {
-                    return Observable.error(new InternalErrorException("error-reading-body", e));
+                    return Single.error(new InternalErrorException("error-reading-body", e));
                 }
             }
         }
 
         if (null != corsOrigins && "OPTIONS".equals(request.getMethod())) {
-            return Observable.just(new CorsPreflightResponse());
+            return Single.just(new CorsPreflightResponse());
         }
 
-        return Observable.error(new NotFoundException("endpoint-not-found", "No endpoint was found."));
+        return Single.error(new NotFoundException("endpoint-not-found", "No endpoint was found."));
     }
 
     protected void initialize(
@@ -628,9 +628,8 @@ public class  RelaxServlet extends HttpServlet {
 
         findAndInvokeEndpoint(context)
                 .subscribeOn(Schedulers.io())
-                .subscribe(new Observer<Object>() {
+                .subscribe(new SingleObserver<Object>() {
 
-                    private boolean emitted = false;
                     private Disposable disposable;
 
                     @Override
@@ -639,7 +638,7 @@ public class  RelaxServlet extends HttpServlet {
                     }
 
                     @Override
-                    public void onNext(Object o) {
+                    public void onSuccess(Object o) {
                         if (null != o) {
                             HttpServletResponse response = (HttpServletResponse) context.getResponse();
                             if (o instanceof CorsPreflightResponse) {
@@ -663,19 +662,22 @@ public class  RelaxServlet extends HttpServlet {
                                 if (null != corsLifetime) {
                                     response.addHeader("Access-Control-Max-Age", corsLifetime);
                                 }
-                                emitted = true;
-
                             } else {
+
                                 try {
                                     sendCorsHeaders(req, response);
 
                                     response.addHeader("Content-Type", "application/json");
                                     context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
-                                    emitted = true;
                                 } catch (IOException e) {
                                     throw new RuntimeException(e);
                                 }
                             }
+                        } else {
+                            HttpServletResponse response = (HttpServletResponse) context.getResponse();
+                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+
+                            sendCorsHeaders(req, response);
                         }
                     }
 
@@ -714,18 +716,6 @@ public class  RelaxServlet extends HttpServlet {
                         }
                         catch (IOException e) {
                             // IGNORED
-                        }
-                        context.complete();
-                        disposable.dispose();
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        if (!emitted) {
-                            HttpServletResponse response = (HttpServletResponse) context.getResponse();
-                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-
-                            sendCorsHeaders(req, response);
                         }
                         context.complete();
                         disposable.dispose();
