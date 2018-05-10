@@ -645,38 +645,36 @@ public class  RelaxServlet extends HttpServlet {
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
 
                             sendCorsHeaders(req, response);
+                        } else if (o instanceof CorsPreflightResponse) {
+
+                            response.addHeader("Access-Control-Allow-Origin", corsOrigins);
+                            String pathInfo = req.getPathInfo();
+                            Set<String> methods = corsMethods.get(pathInfo);
+                            if (null != methods) {
+                                response.addHeader("Access-Control-Allow-Methods", String.join(",", methods));
+                                Set<String> allHeaders = new HashSet<>();
+                                for (String method: methods) {
+                                    Set<String> headers = corsHeaders.get(method + "|" + req.getPathInfo());
+                                    if (null != headers) {
+                                        allHeaders.addAll(headers);
+                                    }
+                                }
+                                if (!allHeaders.isEmpty()) {
+                                    response.addHeader("Access-Control-Allow-Headers", String.join(",", allHeaders));
+                                }
+                            }
+                            if (null != corsLifetime) {
+                                response.addHeader("Access-Control-Max-Age", corsLifetime);
+                            }
                         } else {
-                            if (o instanceof CorsPreflightResponse) {
 
-                                response.addHeader("Access-Control-Allow-Origin", corsOrigins);
-                                String pathInfo = req.getPathInfo();
-                                Set<String> methods = corsMethods.get(pathInfo);
-                                if (null != methods) {
-                                    response.addHeader("Access-Control-Allow-Methods", String.join(",", methods));
-                                    Set<String> allHeaders = new HashSet<>();
-                                    for (String method: methods) {
-                                        Set<String> headers = corsHeaders.get(method + "|" + req.getPathInfo());
-                                        if (null != headers) {
-                                            allHeaders.addAll(headers);
-                                        }
-                                    }
-                                    if (!allHeaders.isEmpty()) {
-                                        response.addHeader("Access-Control-Allow-Headers", String.join(",", allHeaders));
-                                    }
-                                }
-                                if (null != corsLifetime) {
-                                    response.addHeader("Access-Control-Max-Age", corsLifetime);
-                                }
-                            } else {
+                            try {
+                                sendCorsHeaders(req, response);
 
-                                try {
-                                    sendCorsHeaders(req, response);
-
-                                    response.addHeader("Content-Type", "application/json");
-                                    context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
+                                response.addHeader("Content-Type", "application/json");
+                                context.getResponse().getWriter().print(gson.toJson(o, o.getClass()));
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
                             }
                         }
                     }
