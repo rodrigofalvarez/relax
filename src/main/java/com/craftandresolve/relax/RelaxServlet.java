@@ -27,6 +27,7 @@ import com.craftandresolve.relax.exception.HTTPCodeException;
 import com.craftandresolve.relax.exception.InternalErrorException;
 import com.craftandresolve.relax.exception.NotFoundException;
 import com.craftandresolve.relax.type.CorsPreflightResponse;
+import com.craftandresolve.relax.type.EmptyResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.reactivex.Single;
@@ -639,8 +640,12 @@ public class  RelaxServlet extends HttpServlet {
 
                     @Override
                     public void onSuccess(Object o) {
-                        if (null != o) {
-                            HttpServletResponse response = (HttpServletResponse) context.getResponse();
+                        HttpServletResponse response = (HttpServletResponse) context.getResponse();
+                        if (o instanceof EmptyResponse) {
+                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+
+                            sendCorsHeaders(req, response);
+                        } else {
                             if (o instanceof CorsPreflightResponse) {
 
                                 response.addHeader("Access-Control-Allow-Origin", corsOrigins);
@@ -673,11 +678,6 @@ public class  RelaxServlet extends HttpServlet {
                                     throw new RuntimeException(e);
                                 }
                             }
-                        } else {
-                            HttpServletResponse response = (HttpServletResponse) context.getResponse();
-                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-
-                            sendCorsHeaders(req, response);
                         }
                     }
 
