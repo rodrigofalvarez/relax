@@ -11,14 +11,14 @@ The endpoint looks like this:
 public class MyService {
 
     @GET("/person")
-    public Observable<PersonList> listPersons(@Header("Authorization") String authorization,
+    public Single<PersonList> listPersons(@Header("Authorization") String authorization,
                                               @Query("offset") Integer offset,
                                               @Query("limit") Integer limit) {
         ...
     }
 
     @GET("/person/{id}")
-    public Observable<Person> getPerson(HttpServletRequest request,
+    public Single<Person> getPerson(HttpServletRequest request,
                                         @Path("id") Integer personId,
                                         HttpServletResponse response,
                                         @Header("Authorization") String authorization) {
@@ -26,7 +26,7 @@ public class MyService {
     }
 
     @PUT("/person/{id}")
-    public Observable<Person> putPerson(@Path("id") Integer personId,
+    public Single<Person> putPerson(@Path("id") Integer personId,
                                         @Header("Authorization") String authorization,
                                         @Body Person person) {
         ...
@@ -58,6 +58,14 @@ The web.xml file contains this:
             <param-name>directory</param-name>
             <param-value>/directory</param-value>
         </init-param>
+        <init-param>
+            <param-name>corsorigins</param-name>
+            <param-value>*</param-value>
+        </init-param>
+        <init-param>
+            <param-name>corslifetime</param-name>
+            <param-value>36000</param-value>
+        </init-param>
         <async-supported>true</async-supported>
     </servlet>
     <servlet-mapping>
@@ -67,7 +75,7 @@ The web.xml file contains this:
 </web-app>
 ```
 
-Initialization parameters prettyjson and directory are optional.  Parameter directory causes a JSON description of the deployed servics and endpoints to be returned when the specified path is GET to.
+Initialization parameters prettyjson, corsorigin, corslifetime and directory are optional.  Parameter directory causes a JSON description of the deployed servics and endpoints to be returned when the specified path is GET to.  Parameter corsorigin causes CORS headers to be added and OPTIONS endpoints generated.  Parameter corslifetime specifies a lifetime to use in CORS headers.
 
 Download
 --------
@@ -83,13 +91,13 @@ maven {
 Declare dependency:
 
 ```groovy
-compile 'com.craftandresolve:relax:2.1.0'
+compile 'com.craftandresolve:relax:3.0.0'
 ```
 
 License
 -------
 
-    Copyright 2016 Craft+Resolve, LLC.
+    Copyright 2016-2018 Craft+Resolve, LLC.
     
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
