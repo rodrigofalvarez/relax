@@ -3,7 +3,7 @@
   <groupId>com.craftandresolve</groupId>
   <artifactId>relax</artifactId>
   <versioning>
-    <release>3.0.1</release>
+    <release>3.1.0</release>
     <versions>
       <version>2.0.8</version>
       <version>2.0.9</version>
@@ -11,7 +11,8 @@
       <version>2.2.0</version>
       <version>3.0.0</version>
       <version>3.0.1</version>
+      <version>3.1.0</version>
     </versions>
-    <lastUpdated>20180510035042</lastUpdated>
+    <lastUpdated>20180528214558</lastUpdated>
   </versioning>
 </metadata>
