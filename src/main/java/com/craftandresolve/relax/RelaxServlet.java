@@ -677,6 +677,8 @@ public class  RelaxServlet extends HttpServlet {
                                 throw new RuntimeException(e);
                             }
                         }
+                        context.complete();
+                        disposable.dispose();
                     }
 
                     @Override
